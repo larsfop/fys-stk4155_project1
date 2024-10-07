@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.typing as npt
 import matplotlib.pyplot as plt
 from matplotlib import colors, ticker
 import pandas as pd
@@ -83,7 +82,7 @@ class LinearRegression:
         self.y = y
         self.z = z
 
-        self.model_key = model
+        self.name = model
         if model == 'OLS':
             self.model = linear_model.LinearRegression(fit_intercept=False)
         elif model == 'Ridge':
@@ -122,10 +121,10 @@ class LinearRegression:
     def SetParams(self, **params):
         self.params = params
             
-    def Plot(self, beta: np.ndarray) -> None:
+    def Plot(self) -> None:
         fig ,axs = plt.subplots(1, 2, sharex=True, sharey=True)
         
-        axs[0].imshow(self.X @ beta, cmap=cm.coolwarm, origin='lower')
+        axs[0].imshow(self.X @ self.beta, cmap=cm.coolwarm, origin='lower')
         axs[1].imshow(self.z, cmap=cm.coolwarm, origin='lower')
         axs[0].set_xlabel('X')
         axs[1].set_xlabel('X')
@@ -134,7 +133,40 @@ class LinearRegression:
         axs[0].set_title('Fitted data')
         axs[1].set_title('Real data')
         
-    def PlotHeatMap(self, x: np.ndarray, y: np.ndarray, z: np.ndarray, name: str) -> None:
+        fig.savefig(f"{self.name}.pdf")
+        
+    def PlotGraph(self) -> None:
+        plt.figure()
+        plt.grid()
+        plt.xlabel('lmbda')
+        plt.ylabel('MSE')
+        plt.tight_layout()
+        if isinstance(self.key, tuple):
+            k1, k2 = self.key
+            if k1 == 'lmbda':
+                k1, k2 = k2, k1
+            p1, p2 = self.params[k1], self.params[k2]
+            plt.xscale('log')
+            for i in range(len(p1)):
+                plt.plot(p2, self.MSE_test[i,:], label=f"p = {i}")
+                
+            plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+            plt.savefig(f"{self.name}_lmbda+p_MSE.pdf")
+            
+            
+        else:
+            if self.key == 'lmbda':
+                plt.xscale('log')
+            plt.plot(self.params[self.key], self.MSE_test, label='Test Set')
+            plt.plot(self.params[self.key], self.MSE_Train, label='Train set')
+            
+            plt.ylabel('MSE')
+            plt.xlabel(self.key)
+            plt.legend()
+            
+            plt.savefig(f"{self.name}_{self.key}_MSE.pdf")        
+        
+    def PlotHeatMap(self, x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
         x_, y_ = np.meshgrid(x, y)
         
         plt.figure()
@@ -143,7 +175,7 @@ class LinearRegression:
         # cont = plt.imshow(np.log(z), cmap=cm.coolwarm, origin='lower', extent=(x[0], x[-1], y[0], y[-1]))
         plt.colorbar(cont, aspect=5)
         
-        plt.savefig(name+".pdf")
+        plt.savefig(self.name+"_HM.pdf")
 
     def TrainAndTest(self, *params, p: int = 5, lmbda: float = None, rng: int = None, bootstrap: int = 0) -> None:
         X_train, X_test, y_train, y_test = train_test_split(self.X, self.z, test_size=0.2, random_state=rng)
@@ -152,72 +184,62 @@ class LinearRegression:
             self.model.set_params(alpha=lmbda)
 
         if len(params) == 1:
-            key = params[0]
+            self.key = params[0]
             param = self.params[params[0]]
-            MSE_test = np.zeros(len(param))
-            MSE_Train = np.zeros(len(param))
+            self.MSE_test = np.zeros(len(param))
+            self.MSE_Train = np.zeros(len(param))
 
             for i in range(len(param)):
                 X_train_, X_test_ = X_train, X_test
-                if key == 'p':
+                if self.key == 'p':
                     n = int(((i + 2)*(i + 1))/2)
                     X_train_, X_test_ = X_train[:,:n], X_test[:,:n]
-                elif key == 'lmbda':
+                elif self.key == 'lmbda':
                     self.model.set_params(alpha=param[i])
 
                 self.model.fit(X_train_, y_train)
 
                 y_fit = self.model.predict(X_train_)
                 y_pred = self.model.predict(X_test) if bootstrap == 0 else np.empty((y_test.shape[0]*y_test.shape[1], bootstrap))
+                beta = self.model.coef_ if bootstrap == 0 else np.zeros(np.swapaxes(self.X, 0, 1).shape)
                 for k in range(bootstrap):
                     x, y = resample(X_train, y_train)
                     
                     y_pred[:, k] = self.model.fit(x, y).predict(X_test).ravel()
-                
+                    beta += np.swapaxes(self.model.coef_, 0, 1)
+                    
                 if bootstrap != 0 :
                     y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
-                MSE_Train[i] = MSE(y_train, y_fit)
-                MSE_test[i] = MSE(y_test, y_pred)
+                self.MSE_Train[i] = MSE(y_train, y_fit)
+                self.MSE_test[i] = MSE(y_test, y_pred)
 
                 # print(f'{'MSE:' : <4} {mean_squared_error(y_test, y_pred):g}')
                 # print(f'{'R2:' : <4} {r2_score(y_test, y_pred):g}')
 
-            plt.figure()
-            plt.grid()
-            if key == 'lmbda':
-                plt.xscale('log')
-            plt.plot(param, MSE_test, label='Test Set')
-            plt.plot(param, MSE_Train, label='Train set')
-            plt.legend()
-
         elif len(params) == 2:
-            k1, k2 = params[0], params[1]
-            p1, p2 = self.params[k1], self.params[k2]
+            self.key = params[0], params[1]
+            p = self.params[self.key[0]], self.params[self.key[1]]
 
-            MSE_test = np.zeros( ( (
-                len(p1), 
-                len(p2)
+            self.MSE_test = np.zeros( ( (
+                len(p[0]), 
+                len(p[1])
                 ) ) )
             
-            plt.figure()
-            plt.grid()
-            plt.xscale('log')
-
-            for i in range(len(p1)):
+            for i in range(len(p[0])):
                 X_train_, X_test_ = X_train, X_test
-                if k1 == 'p':
+                if self.key[0] == 'p':
                     n = int(((i + 2)*(i + 1))/2)
                     X_train_, X_test_ = X_train[:,:n], X_test[:,:n]
-                elif k1 == 'lmbda':
-                    self.model.set_params(alpha=p1[i])
+                elif self.key[0] == 'lmbda':
+                    self.model.set_params(alpha=p[0][i])
 
-                for j in range(len(p2)):
-                    if k2 == 'p':
+                for j in range(len(p[1])):
+                    if self.key[1] == 'p':
                         n = int(((j + 2)*(j + 1))/2)
                         X_train_, X_test_ = X_train[:,:n], X_test[:,:n]
-                    elif k2 == 'lmbda':
-                        self.model.set_params(alpha=p2[j])
+                    elif self.key[1] == 'lmbda':
+                        self.model.set_params(alpha=p[1][j])
 
                     self.model.fit(X_train_, y_train)
 
@@ -232,30 +254,30 @@ class LinearRegression:
                         y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
                     # MSE_Train[i] = mean_squared_error(y_train, y_fit)
-                    MSE_test[i, j] = MSE(y_test, y_pred)
+                    self.MSE_test[i, j] = MSE(y_test, y_pred)
 
                     # print(f'{'MSE:' : <4} {mean_squared_error(y_test, y_pred):g}')
                     # print(f'{'R2:' : <4} {r2_score(y_test, y_pred):g}')
 
-                plt.plot(p2, MSE_test[i,:], label=f'p = {p1[i]}')
-
-            plt.legend()
-            
         else:
             self.model.fit(X_train, y_train)
+            n = int(((p + 2)*(p + 1))/2)
 
             y_fit = self.model.predict(X_train)
             y_pred = self.model.predict(X_test) if bootstrap == 0 else np.empty((y_test.shape[0]*y_test.shape[1], bootstrap))
+            beta = self.model.coef_ if bootstrap == 0 else np.zeros((n, len(self.x)))
             for k in range(bootstrap):
                 x, y = resample(X_train, y_train)
                 
                 y_pred[:, k] = self.model.fit(x, y).predict(X_test).ravel()
+                beta += np.swapaxes(self.model.coef_, 0, 1)
             
+            self.beta = beta/bootstrap
             if bootstrap != 0 :
                 y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
-            print(f'{'MSE:' : <4} {MSE(y_test, y_pred):g}')
-            print(f'{'R2:' : <4} {R2(y_test, y_pred):g}')
+            print(f'{"MSE:" : <4} {MSE(y_test, y_pred):g}')
+            print(f'{"R2:" : <4} {R2(y_test, y_pred):g}')
 
     def CrossValidation(self, *params, name: str, p_order: int = 5, lmbda: float = None, k: int = 10, n_jobs: int = 1) -> None:
         """
@@ -274,7 +296,7 @@ class LinearRegression:
         for param in params:
             param_grid[param] = self.params[param]
 
-        cv = GridSearchCV(Estimator(lin_reg=self.model_key, p=p_order, lmbda=lmbda),
+        cv = GridSearchCV(Estimator(lin_reg=self.name, p=p_order, lmbda=lmbda),
                       cv=k,
                       param_grid=param_grid,
                       scoring='neg_mean_squared_error',
@@ -287,12 +309,12 @@ class LinearRegression:
         MSE_std = df['rank_test_score' == cv.best_index_]
         print(pd.DataFrame(MSE_std))"""
         
-        print(f'{'Parameter' : <12} Value')
+        print(f"{'Parameter' : <12} Value")
         print('---------------------------')
         for param, value in cv.best_params_.items():
-            print(f'{'Best '+param : <12} {value:g}')
-        print(f'{'Best MSE' : <12} {-cv.best_score_:.5f}')
-        print(f'{'CV score': <12} {-np.mean(cross_val_score(cv.best_estimator_, self.X, self.z, scoring="neg_mean_squared_error", cv=k)):.5f}')
+            print(f"{'Best '+param : <12} {value:g}")
+        print(f"{'Best MSE' : <12} {-cv.best_score_:.5f}")
+        print(f"{'CV score': <12} {-np.mean(cross_val_score(cv.best_estimator_, self.X, self.z, scoring='neg_mean_squared_error', cv=k)):.5f}")
 
         n = len(params)
         results = -cv.cv_results_['mean_test_score']
@@ -324,17 +346,22 @@ if __name__ == "__main__":
         
     z = FrankeFunction(x, y, 0)
     
-    p = 5
+    p = 12
+    lmbda = 1e-4
     
-    lambdas = np.logspace(-8, 1, n)
+    lambdas = np.logspace(-8, 1, 20)
     ps = np.arange(p+1)
     
     k = 10
     ridge = LinearRegression(x, y, z, 'Ridge')
     ridge.DesignMatrix(p)
     ridge.SetParams(p=ps, lmbda=lambdas)
-    ridge.TrainAndTest('lmbda', bootstrap=20)
+    ridge.TrainAndTest('p', 'lmbda', bootstrap=2, p=p, lmbda=lmbda)
     # ridge.CrossValidation('p', 'lmbda', name='Ridge_CV' ,n_jobs=8)
+    
+    # ridge.Plot()
+    ridge.PlotGraph()
+    # ridge.PlotHeatMap()
 
     # ols = LinearRegression(x, y, z, 'OLS')
     # ols.DesignMatrix(p)
