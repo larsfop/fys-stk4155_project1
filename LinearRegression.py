@@ -140,7 +140,7 @@ class LinearRegression:
         plt.grid()
         plt.xlabel('lmbda')
         plt.ylabel('MSE')
-        plt.tight_layout()
+        plt.tight_layout(rect=[0.05, 0, 0.85, 1])
         if isinstance(self.key, tuple):
             k1, k2 = self.key
             if k1 == 'lmbda':
@@ -151,7 +151,7 @@ class LinearRegression:
                 plt.plot(p2, self.MSE_test[i,:], label=f"p = {i}")
                 
             plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-            plt.savefig(f"{self.name}_lmbda+p_MSE.pdf")
+            plt.savefig(f"{self.name}_lmbda+p_MSE.pdf", bbox_inches='tight')
             
             
         else:
