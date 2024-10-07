@@ -158,7 +158,7 @@ class LinearRegression:
             if self.key == 'lmbda':
                 plt.xscale('log')
             plt.plot(self.params[self.key], self.MSE_test, label='Test Set')
-            plt.plot(self.params[self.key], self.MSE_Train, label='Train set')
+            # plt.plot(self.params[self.key], self.MSE_Train, label='Train set')
             
             plt.ylabel('MSE')
             plt.xlabel(self.key)
@@ -166,16 +166,18 @@ class LinearRegression:
             
             plt.savefig(f"{self.name}_{self.key}_MSE.pdf")        
         
-    def PlotHeatMap(self, x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
-        x_, y_ = np.meshgrid(x, y)
-        
+    def PlotHeatMap(self) -> None:
         plt.figure()
         plt.yscale('log')
-        cont = plt.contourf(x, y, z, norm='log')
+        print(self.params['p'].shape, self.params['lmbda'].shape, self.MSE_test.shape)
+        cont = plt.contourf(self.params['p'], self.params['lmbda'], np.swapaxes(self.MSE_test, 0, 1), norm='log')
         # cont = plt.imshow(np.log(z), cmap=cm.coolwarm, origin='lower', extent=(x[0], x[-1], y[0], y[-1]))
         plt.colorbar(cont, aspect=5)
         
         plt.savefig(self.name+"_HM.pdf")
+        
+    def BiasVariance(self):
+        pass
 
     def TrainAndTest(self, *params, p: int = 5, lmbda: float = None, rng: int = None, bootstrap: int = 0) -> None:
         X_train, X_test, y_train, y_test = train_test_split(self.X, self.z, test_size=0.2, random_state=rng)
@@ -319,23 +321,14 @@ class LinearRegression:
         n = len(params)
         results = -cv.cv_results_['mean_test_score']
         if n == 1:
-            plt.figure()
-            MSE = results
-            plt.plot(param_grid[params[0]], MSE)
+            self.key = params[0]
+            self.MSE_test = results
         elif n > 1:
-            p = len(param_grid['p'])
-            l = len(param_grid['lmbda'])
-            MSE = np.zeros((l, p))
+            results = results.reshape(len(self.params['p']), len(self.params['lmbda']), order='F')
+            self.key = params
+            self.MSE_test = results
 
-            plt.figure()
-            plt.xscale('log')
-            for i in range(p):
-                MSE[:, i] = results[i::p]
-                plt.plot(param_grid['lmbda'], results[i::p], label=f'p = {i}')
-
-            plt.legend()
-
-            self.PlotHeatMap(param_grid['p'], param_grid['lmbda'], MSE, name+'_HM')
+            # self.PlotHeatMap(param_grid['p'], param_grid['lmbda'], MSE, name+'_HM')
 
         
 if __name__ == "__main__":
@@ -356,8 +349,8 @@ if __name__ == "__main__":
     ridge = LinearRegression(x, y, z, 'Ridge')
     ridge.DesignMatrix(p)
     ridge.SetParams(p=ps, lmbda=lambdas)
-    ridge.TrainAndTest('p', 'lmbda', bootstrap=2, p=p, lmbda=lmbda)
-    # ridge.CrossValidation('p', 'lmbda', name='Ridge_CV' ,n_jobs=8)
+    # ridge.TrainAndTest('p', 'lmbda', bootstrap=2, p=p, lmbda=lmbda)
+    ridge.CrossValidation('lmbda', name='Ridge_CV', n_jobs=1)
     
     # ridge.Plot()
     ridge.PlotGraph()
