@@ -36,6 +36,14 @@ def MSE(y_data: np.ndarray, y_model: np.ndarray) -> float:
     return np.mean(np.mean((y_data - y_model)**2, axis=1, keepdims=True))
 
 
+def Bias(y_data: np.ndarray, y_model: np.ndarray) -> float:
+    return np.mean( (y_data - np.mean(y_model, axis=1, keepdims=True))**2 )
+
+
+def Variance(y_model: np.ndarray) -> float:
+    return np.mean( np.var(y_model, axis=1, keepdims=True) )
+
+
 class Estimator(BaseEstimator):
     def __init__(self, p: int = 1, lmbda: float = None, lin_reg = 'OLS'):
         """
@@ -188,6 +196,8 @@ class LinearRegression:
             param = self.params[params[0]]
             self.MSE_test = np.zeros(len(param))
             self.MSE_Train = np.zeros(len(param))
+            self.Bias = np.zeros(len(param))
+            self.Variance = np.zeros(len(param))
 
             for i in range(len(param)):
                 X_train_, X_test_ = X_train, X_test
@@ -213,6 +223,9 @@ class LinearRegression:
 
                 self.MSE_Train[i] = MSE(y_train, y_fit)
                 self.MSE_test[i] = MSE(y_test, y_pred)
+                
+                self.Bias[i] = Bias(y_test, y_pred)
+                self.Variance[i] = Variance(y_pred)
 
                 # print(f'{'MSE:' : <4} {mean_squared_error(y_test, y_pred):g}')
                 # print(f'{'R2:' : <4} {r2_score(y_test, y_pred):g}')
@@ -222,6 +235,14 @@ class LinearRegression:
             p = self.params[self.key[0]], self.params[self.key[1]]
 
             self.MSE_test = np.zeros( ( (
+                len(p[0]), 
+                len(p[1])
+                ) ) )
+            self.Bias = np.zeros( ( (
+                len(p[0]), 
+                len(p[1])
+                ) ) )
+            self.Variance = np.zeros( ( (
                 len(p[0]), 
                 len(p[1])
                 ) ) )
@@ -255,6 +276,8 @@ class LinearRegression:
 
                     # MSE_Train[i] = mean_squared_error(y_train, y_fit)
                     self.MSE_test[i, j] = MSE(y_test, y_pred)
+                    self.Bias[i, j] = Bias(y_test, y_pred)
+                    self.Variance[i, j] = Variance(y_pred)
 
                     # print(f'{'MSE:' : <4} {mean_squared_error(y_test, y_pred):g}')
                     # print(f'{'R2:' : <4} {r2_score(y_test, y_pred):g}')
@@ -276,8 +299,10 @@ class LinearRegression:
             if bootstrap != 0 :
                 y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
-            print(f'{"MSE:" : <4} {MSE(y_test, y_pred):g}')
-            print(f'{"R2:" : <4} {R2(y_test, y_pred):g}')
+            print(f'{"MSE:" : <10} {MSE(y_test, y_pred):g}')
+            print(f'{"R2:" : <10} {R2(y_test, y_pred):g}')
+            print(f'{"Bias:" : <10} {Bias(y_test, y_pred):g}')
+            print(f'{"Variance:" : <10} {Variance(y_pred):g}')
 
     def CrossValidation(self, *params, name: str, p_order: int = 5, lmbda: float = None, k: int = 10, n_jobs: int = 1) -> None:
         """
