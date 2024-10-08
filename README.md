@@ -1,7 +1,22 @@
 # fys-stk4155_project1
 
+This project comes with two scripts
 
-Runs for the project
+    1. LinearRegression.py
+        This script contains all of the methods used in a single class, the class contains two methods, one for fitting data with or without bootstrap and one that does a gridsearch with cross validation.
+        The GridSearch can be ran with no parameters allow for a single cross validation if needed.
+        The class contains a few plot functions that are all serve a very specific purpose.
+        Finally the script contains functions for computing the MSE, R2, Bias and Variance,
+        as well as seperate classes for OLS and Ridge implementations and a custom estimator for grid search
+
+    2. main.py **kwargs
+        This script runs LinearRegression.py and gains all of the results. The script can take in a few command line agruments all of which can be found defined in the config dictionary inside the script,
+        see below for examples for how to use them. The script is build into 5 steps:
+            1. Load data and set options
+            2. Setup the regression model
+            3. Setup parameters and Design matrix
+            4. Fit the model either with or without bootstrap, or with GridSearchCV
+            5. Make plots
 
 ### Ordinary Least Squares:
     Fit the Franke function with OLS using sklearn
@@ -55,7 +70,7 @@ Runs for the project
 
 
 ### Ridge
-
+    fits:
      python3 main_Franke.py model=Ridge plots=graph,beta p=20 lmbda=1e-4 data=terrain1 params=p scale=1
     cv:
      python3 main_Franke.py plots=heatmap,plot model=Ridge cv=1 njobs=8 p=20 params=p data=terrain1 scale=1
