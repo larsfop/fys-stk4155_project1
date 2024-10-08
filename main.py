@@ -77,10 +77,6 @@ else:
 
     x = np.linspace(0, 1, xn, dtype=np.float32)
     y = np.linspace(0, 1, yn, dtype=np.float32)
-    # x = np.arange(0, 1, xn, dtype=np.float32)
-    # y = np.arange(0, 1, yn, dtype=np.float32)
-    # x = np.asarray(np.sort(np.random.uniform(0.1, 1, xn)), dtype=np.float32)
-    # y = np.asarray(np.sort(np.random.uniform(0.1, 1, yn)), dtype=np.float32)
 
     x, y = np.meshgrid(x, y)
 

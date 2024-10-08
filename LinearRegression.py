@@ -86,6 +86,9 @@ class Estimator(BaseEstimator):
 
 
 class OLS:
+    """
+        Custom implementation of the OLS method with fit, predict and .coef_ methods as sci-kit learn uses such that they can use the same structure
+    """
     def __init__(self) -> None:
         pass    
 
@@ -103,6 +106,9 @@ class OLS:
     
 
 class Ridge:
+    """
+        Custom implementation of the Ridge method with fit, predict and .coef_ methods as sci-kit learn uses such that they can use the same structure
+    """
     def __init__(self, alpha: float = 0.1) -> None:
         self.param = {'alpha': alpha}
 
@@ -133,6 +139,7 @@ class LinearRegression:
 
         self.nx, self.ny = z.shape
 
+        # saves the model used, can be a string, or function
         self.name = model
         if model == 'OLS':
             self.model = linear_model.LinearRegression(fit_intercept=False)
@@ -140,6 +147,7 @@ class LinearRegression:
             self.model = linear_model.Ridge(fit_intercept=False)
         elif model == 'Lasso':
             self.model = linear_model.Lasso(fit_intercept=False)
+        # Sets the model as self implemented classes
         elif isinstance(model, Callable):
             self.model = model()
             self.name = model.__name__
@@ -151,6 +159,7 @@ class LinearRegression:
             'lmbda': []
         }
 
+    # The ability to set the model outside the constructor
     def SetModel(self, model):
         self.name = model
         if model == 'OLS':
@@ -165,7 +174,9 @@ class LinearRegression:
         else:
             self.model = model
     
+    # Create the design matrix, have the ability to return the matrix
     def DesignMatrix(self, p: int, intercept: bool = True) -> np.ndarray:
+        # 2d design matrix
         if self.y.any() != None:
             x, y = np.ravel(self.x), np.ravel(self.y)
             self.X = np.ones((len(x), 1))
@@ -177,6 +188,7 @@ class LinearRegression:
                     j -= 1
                     i += 1
         
+        # or if needed 1d
         else:
             self.X = np.ones((len(self.x), p + 1))
             for i in range(1, p + 1):
@@ -190,6 +202,7 @@ class LinearRegression:
     def SetParams(self, **params):
         self.params = params
             
+    # Plot the fits and true data
     def Plot(self, plot: str = 'MSE', ls: str = '-') -> None:
         fig ,axs = plt.subplots(1, 2, sharex=True, sharey=True)
         
@@ -205,6 +218,7 @@ class LinearRegression:
         
         fig.savefig(f"Plots/{self.name}.pdf")
         
+    # plot the MSE and R2 against either p or lmbda or both
     def PlotGraph(self, plot: str = 'MSE', ls: str = '-', train: bool = False) -> None:
         plt.grid()
         plt.xlabel('lmbda')
@@ -243,6 +257,7 @@ class LinearRegression:
             
             plt.savefig(f"Plots/{self.name}_{self.key}_{plot}.pdf")        
         
+    # Plot heatmap for p and lmbda
     def PlotHeatMap(self, plot: str = 'MSE', ls: str = '-') -> None:
         fig, ax = plt.subplots(figsize=(14,14))
         lambdas = self.params['lmbda']
@@ -259,13 +274,10 @@ class LinearRegression:
 
         ax.set_xlabel('p')
         ax.set_ylabel(r'log$_{10}$($\beta$)')
-
-        # cont = plt.contourf(self.params['p'], self.params['lmbda'], np.swapaxes(self.MSE_test, 0, 1), norm='log')
-        # cont = plt.imshow(np.log(z), cmap=cm.coolwarm, origin='lower', extent=(x[0], x[-1], y[0], y[-1]))
-        # plt.colorbar(cont, aspect=5)
         
         plt.savefig('Plots/'+self.name+"_HM.pdf")
 
+    # Plot beta heatmap
     def PlotBeta(self, plot: str = 'MSE', ls: str = '-') -> None:
         fig, ax = plt.subplots(figsize=(16,4))
         mask = np.where(self.beta == np.inf, 1, 0)
@@ -284,6 +296,7 @@ class LinearRegression:
 
         plt.savefig(f'Plots/{self.name}_BetaHM.pdf')
 
+    # Plot the bias variance tradeoff
     def BiasVariance(self, plot: str = 'MSE', ls: str = '-') -> None:
         mse = self.results['MSE_test']
         bias = self.results['Bias']
@@ -302,21 +315,26 @@ class LinearRegression:
         plt.grid()
         plt.savefig(f"Plots/{self.name}_BiasVariance.pdf")
 
+    # The main training of the model
     def TrainAndTest(self, *params, p: int = 5, lmbda: float = None, rng: int = None, bootstrap: int = 0, scale_data: bool = False) -> None:
         X_train, X_test, y_train, y_test = train_test_split(self.X, np.ravel(self.z), test_size=0.2, random_state=rng)
 
+        # reshapes the data just incase, for usage of MSE, R2 functions
         y_train, y_test = y_train.reshape(-1,1), y_test.reshape(-1,1)
 
+        # scale the data
         if scale_data:
             xscaler = StandardScaler()
             yscaler = StandardScaler()
             zshape = self.z.shape
 
+            # scale the design matrix
             xscaler.fit(X_train)
             X_train = xscaler.transform(X_train)
             X_test = xscaler.transform(X_test)
             self.X = xscaler.transform(self.X)
 
+            # scale the true data
             y_train = y_train.reshape(-1, 1)
             y_test = y_test.reshape(-1, 1)
             self.z = self.z.ravel().reshape(-1, 1)
@@ -326,9 +344,11 @@ class LinearRegression:
             y_test = np.ravel(yscaler.transform(y_test)).reshape(-1, 1)
             self.z = np.ravel(yscaler.transform(self.z)).reshape(zshape)
 
+        # sets the lambda parameter for Ridge and Lasso, not always needed, but just in case
         if lmbda != None:
             self.model.set_params(alpha=lmbda)
 
+        # trains and test for one parameter, e.g. p or lambda
         if len(params) == 1:
             self.key = params[0]
             param = self.params[params[0]]
@@ -341,6 +361,7 @@ class LinearRegression:
             pn = len(self.params['p'])
             self.beta = np.full((pn, int(((pn + 1)*(pn))/2)), np.inf)
             for i in range(len(param)):
+                # depending on the parameter might need to either set p order or new lambda value
                 X_train_, X_test_ = X_train, X_test
                 if self.key == 'p':
                     n = int(((i + 2)*(i + 1))/2)
@@ -351,6 +372,8 @@ class LinearRegression:
                 self.model.fit(X_train_, y_train)
 
                 y_fit = self.model.predict(X_train_)
+
+                # Here comes the bootstrap implementation, based on the implementation from the lecture notes
                 y_pred = self.model.predict(X_test_) if bootstrap == 0 else np.empty((y_test.shape[0], bootstrap))
                 beta = self.model.coef_ if bootstrap == 0 else np.zeros((n, bootstrap))
                 for k in range(bootstrap):
@@ -361,7 +384,6 @@ class LinearRegression:
                     
                 if bootstrap != 0 :
                     beta = np.mean(beta, axis=1)
-                    # y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
                 self.MSE_Train[i] = MSE(y_train, y_fit)
                 self.MSE_test[i] = MSE(y_test, y_pred)
@@ -372,9 +394,7 @@ class LinearRegression:
 
                 self.beta[i, :n] = beta
 
-                # print(f'{'MSE:' : <4} {mean_squared_error(y_test, y_pred):g}')
-                # print(f'{'R2:' : <4} {r2_score(y_test, y_pred):g}')
-
+        # Trains model for both parameters, follows same structure
         elif len(params) == 2:
             self.key = params[0], params[1]
             p = self.params[self.key[0]], self.params[self.key[1]]
@@ -439,6 +459,7 @@ class LinearRegression:
                     # print(f'{'MSE:' : <4} {mean_squared_error(y_test, y_pred):g}')
                     # print(f'{'R2:' : <4} {r2_score(y_test, y_pred):g}')
 
+        # Trains for a single value for both parameters p and lambda
         else:
             self.model.fit(X_train, y_train)
             n = int(((p + 2)*(p + 1))/2)
@@ -454,11 +475,7 @@ class LinearRegression:
             
             if bootstrap != 0 :
                 self.beta = np.mean(self.beta, axis=1)
-                # y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
-            print(self.beta.shape, self.beta)
-
-            # y_test = y_test.reshape(-1,1)
             self.MSE_Train = MSE(y_train, y_fit)
             self.MSE_test = MSE(y_test, y_pred)
             self.R2 = R2(y_test, y_pred)
@@ -471,11 +488,7 @@ class LinearRegression:
             print(f'{"Bias:" : <10} {self.Bias:g}')
             print(f'{"Variance:" : <10} {self.Variance:g}')
 
-        # print(self.X.shape, self.beta.shape)
-        # print(self.X)
-        # print(self.beta)
-        # print((self.X @ self.beta).reshape(100, 100))
-
+        # Save the results for later
         self.results = {
             'MSE_test': self.MSE_test,
             'MSE_train': self.MSE_Train,
@@ -501,21 +514,6 @@ class LinearRegression:
         for param in params:
             param_grid[param] = self.params[param]
 
-        pipe = Pipeline(steps=[
-            ("scaler", StandardScaler()),
-            ("model", Estimator(lin_reg=self.name, p=p_order, lmbda=lmbda))
-        ])
-
-        # if scale_data:
-            # cv = make_pipeline(StandardScaler(),
-            #                GridSearchCV(Estimator(lin_reg=self.name, p=p_order, lmbda=lmbda),
-            #                                cv=k,
-            #                                param_grid=param_grid,
-            #                                scoring='neg_mean_squared_error',
-            #                                n_jobs=n_jobs,
-            #                                refit=True)
-            # )
-
         cv = GridSearchCV(Estimator(lin_reg=self.name, p=p_order, lmbda=lmbda),
                     cv=k,
                     param_grid=param_grid,
@@ -523,6 +521,7 @@ class LinearRegression:
                     n_jobs=n_jobs
         )
 
+        # Scale the whole dataset as I don't know how to scale within the grid search
         if scale_data:
             xscaler = StandardScaler()
             yscaler = StandardScaler()
@@ -535,22 +534,19 @@ class LinearRegression:
 
         cv.fit(self.X, np.ravel(self.z))
 
-        """print(cv.best_index_)
-        df = pd.DataFrame(cv.cv_results_)
-        MSE_std = df['rank_test_score' == cv.best_index_]
-        print(pd.DataFrame(MSE_std))"""
-        
-        # if scale_data:
-        #     cv = cv.named_steps['gridsearchcv'] # Get the gridsearch from the pipeline
+        # Print best parameters and MSE
         print(f"{'Parameter' : <12} Value")
         print('---------------------------')
         for param, value in cv.best_params_.items():
             print(f"{'Best '+param : <12} {value:g}")
         print(f"{'Best MSE' : <12} {-cv.best_score_:.5f}")
-        # print(f"{'CV score': <12} {-np.mean(cross_val_score(cv.best_estimator_, self.X, self.z, scoring='neg_mean_squared_error', cv=k)):.5f}")
 
         self.model = cv.best_estimator_
 
+        # Setup the arrays for MSE
+        # Must be done due to how grid search spits out the based on the parameters
+        # If both parameters are tested then it comes in the shape of [[l1, p1], [l1, p2], [l1, pn], [l2,p1]] ...
+        # This means we must seperate the p orders such that they are ordered
         n = len(params)
         results = -cv.cv_results_['mean_test_score']
         if n == 1:
@@ -567,6 +563,8 @@ class LinearRegression:
         self.name += '_CV'
         
 
+# Here are my testing function, basically just makes random calls 
+# There is nothing here but pain and suffering :)
 if __name__ == "__main__":
     start = time.time()
     n = 30
