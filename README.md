@@ -3,14 +3,16 @@
 This project comes with two scripts
 
     1. LinearRegression.py
-        This script contains all of the methods used in a single class, the class contains two methods, one for fitting data with or without bootstrap and one that does a gridsearch with cross validation.
+        This script contains all of the methods used in a single class, the class contains two methods, 
+        one for fitting data with or without bootstrap and one that does a gridsearch with cross validation.
         The GridSearch can be ran with no parameters allow for a single cross validation if needed.
         The class contains a few plot functions that are all serve a very specific purpose.
         Finally the script contains functions for computing the MSE, R2, Bias and Variance,
         as well as seperate classes for OLS and Ridge implementations and a custom estimator for grid search
 
     2. main.py **kwargs
-        This script runs LinearRegression.py and gains all of the results. The script can take in a few command line agruments all of which can be found defined in the config dictionary inside the script,
+        This script runs LinearRegression.py and gains all of the results. The script can take in a few command line 
+        agruments all of which can be found defined in the config dictionary inside the script,
         see below for examples for how to use them. The script is build into 5 steps:
             1. Load data and set options
             2. Setup the regression model
