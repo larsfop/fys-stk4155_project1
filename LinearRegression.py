@@ -14,19 +14,20 @@ from sklearn.utils import resample
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
+from matplotlib.colors import LogNorm
 from random import random, seed
 import time
+import seaborn as sns
+from typing import Tuple, Callable
 
-def FrankeFunction(x: np.ndarray, y: np.ndarray, noise_factor: int=0, rng: int = None) -> np.ndarray:
+def FrankeFunction(x: np.ndarray, y: np.ndarray, noise: float = 0, rng: int = None) -> np.ndarray:
     np.random.seed(rng)
-    
-    x, y = np.meshgrid(x, y)
     
     term1 = 0.75*np.exp(-(0.25*(9*x-2)**2) - 0.25*((9*y-2)**2))
     term2 = 0.75*np.exp(-((9*x+1)**2)/49.0 - 0.1*(9*y+1))
     term3 = 0.5*np.exp(-(9*x-7)**2/4.0 - 0.25*((9*y-3)**2))
     term4 = -0.2*np.exp(-(9*x-4)**2 - (9*y-7)**2)
-    return term1 + term2 + term3 + term4 + noise_factor*np.random.normal(0, 1, x.shape)
+    return term1 + term2 + term3 + term4 + np.random.normal(0, noise, x.shape)
 
 def R2(y_data: np.ndarray, y_model: np.ndarray) -> float:
     return np.mean(1 - np.sum((y_data - y_model) ** 2, axis=1, keepdims=True) / np.sum((y_data - np.mean(y_data)) ** 2))
@@ -37,10 +38,12 @@ def MSE(y_data: np.ndarray, y_model: np.ndarray) -> float:
 
 
 def Bias(y_data: np.ndarray, y_model: np.ndarray) -> float:
+    y_model = y_model.reshape(-1, 1)
     return np.mean( (y_data - np.mean(y_model, axis=1, keepdims=True))**2 )
 
 
 def Variance(y_model: np.ndarray) -> float:
+    y_model = y_model.reshape(-1, 1)
     return np.mean( np.var(y_model, axis=1, keepdims=True) )
 
 
@@ -82,13 +85,55 @@ class Estimator(BaseEstimator):
         n = int(((self.p + 2)*(self.p + 1))/2)
         x_ = x[:,:n]
         return self.lin_reg.predict(x_)
+
+
+class OLS:
+    def __init__(self) -> None:
+        pass    
+
+    def __str__(self) -> str:
+        return 'OLS'
+        
+    def fit(self, x: np.ndarray, y: np.ndarray):
+        y = np.ravel(y)
+        self.coef_ = (np.linalg.inv(x.T @ x) @ x.T ) @ y
+
+        return self
+    
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        return (x @ self.coef_).reshape(-1,1)
     
 
+class Ridge:
+    def __init__(self, alpha: float = 0.1) -> None:
+        self.param = {'alpha': alpha}
+
+    def __str__(self) -> str:
+        return 'Ridge'
+    
+    def set_params(self, alpha):
+        self.param['alpha'] = alpha
+        
+    def fit(self, x: np.ndarray, y: np.ndarray):
+        n = x.shape[1]
+        I = np.eye(n, n)
+        lmbda = self.param['alpha']
+        y = np.ravel(y)
+        self.coef_ = np.linalg.inv(x.T @ x + lmbda*I) @ x.T @ y
+
+        return self
+    
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        return (x @ self.coef_).reshape(-1,1)
+
+
 class LinearRegression:
-    def __init__(self, x: np.ndarray, y: np.ndarray, z: np.ndarray, model: str) -> None:
+    def __init__(self, x: np.ndarray, y: np.ndarray, z: np.ndarray, model) -> None:
         self.x = x
         self.y = y
         self.z = z
+
+        self.nx, self.ny = z.shape
 
         self.name = model
         if model == 'OLS':
@@ -97,6 +142,9 @@ class LinearRegression:
             self.model = linear_model.Ridge(fit_intercept=False)
         elif model == 'Lasso':
             self.model = linear_model.Lasso(fit_intercept=False)
+        elif isinstance(model, Callable):
+            self.model = model()
+            self.name = model.__name__
         else:
             self.model = model
 
@@ -104,15 +152,30 @@ class LinearRegression:
             'p': [],
             'lmbda': []
         }
+
+    def SetModel(self, model):
+        self.name = model
+        if model == 'OLS':
+            self.model = linear_model.LinearRegression(fit_intercept=False)
+        elif model == 'Ridge':
+            self.model = linear_model.Ridge(fit_intercept=False)
+        elif model == 'Lasso':
+            self.model = linear_model.Lasso(fit_intercept=False)
+        elif isinstance(model, Callable):
+            self.model = model()
+            self.name = model.__name__
+        else:
+            self.model = model
     
     def DesignMatrix(self, p: int, intercept: bool = True) -> np.ndarray:
         if self.y.any() != None:
-            self.X = np.ones((len(self.x), 1))
+            x, y = np.ravel(self.x), np.ravel(self.y)
+            self.X = np.ones((len(x), 1))
             for k in range(1, p + 1):
                 j = k
                 i = 0
                 while i < k + 1:
-                    self.X = np.column_stack((self.X, self.x**i * self.y**j))
+                    self.X = np.column_stack((self.X, x**i * y**j))
                     j -= 1
                     i += 1
         
@@ -129,10 +192,11 @@ class LinearRegression:
     def SetParams(self, **params):
         self.params = params
             
-    def Plot(self) -> None:
+    def Plot(self, plot: str = 'MSE', ls: str = '-') -> None:
         fig ,axs = plt.subplots(1, 2, sharex=True, sharey=True)
         
-        axs[0].imshow(self.X @ self.beta, cmap=cm.coolwarm, origin='lower')
+        # axs[0].imshow((self.X @ self.beta).reshape(self.nx, self.ny), cmap=cm.coolwarm, origin='lower')
+        axs[0].imshow(self.model.predict(self.X).reshape(self.nx, self.ny), cmap=cm.coolwarm, origin='lower')
         axs[1].imshow(self.z, cmap=cm.coolwarm, origin='lower')
         axs[0].set_xlabel('X')
         axs[1].set_xlabel('X')
@@ -141,14 +205,20 @@ class LinearRegression:
         axs[0].set_title('Fitted data')
         axs[1].set_title('Real data')
         
-        fig.savefig(f"{self.name}.pdf")
+        fig.savefig(f"Plots/{self.name}.pdf")
         
-    def PlotGraph(self) -> None:
-        plt.figure()
+    def PlotGraph(self, plot: str = 'MSE', ls: str = '-', train: bool = False) -> None:
         plt.grid()
         plt.xlabel('lmbda')
-        plt.ylabel('MSE')
+        plt.ylabel(plot)
         plt.tight_layout(rect=[0.05, 0, 0.85, 1])
+
+        if plot == 'MSE':
+            y = self.results['MSE_test']
+            y2 = self.results['MSE_train']
+        else:
+            y = self.results[plot]
+
         if isinstance(self.key, tuple):
             k1, k2 = self.key
             if k1 == 'lmbda':
@@ -156,39 +226,107 @@ class LinearRegression:
             p1, p2 = self.params[k1], self.params[k2]
             plt.xscale('log')
             for i in range(len(p1)):
-                plt.plot(p2, self.MSE_test[i,:], label=f"p = {i}")
+                plt.plot(p2, y[i,:], label=f"p = {i}", ls=ls)
                 
             plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-            plt.savefig(f"{self.name}_lmbda+p_MSE.pdf", bbox_inches='tight')
+            plt.savefig(f"Plots/{self.name}_lmbda+p_{plot}.pdf", bbox_inches='tight')
             
             
         else:
             if self.key == 'lmbda':
                 plt.xscale('log')
-            plt.plot(self.params[self.key], self.MSE_test, label='Test Set')
-            # plt.plot(self.params[self.key], self.MSE_Train, label='Train set')
+            if train:
+                plt.plot(self.params[self.key], y2, label=f'Train', ls=ls)
+            plt.plot(self.params[self.key], y, label=f'Test', ls=ls)
             
-            plt.ylabel('MSE')
+            plt.ylabel(plot)
             plt.xlabel(self.key)
             plt.legend()
             
-            plt.savefig(f"{self.name}_{self.key}_MSE.pdf")        
+            plt.savefig(f"Plots/{self.name}_{self.key}_{plot}.pdf")        
         
-    def PlotHeatMap(self) -> None:
-        plt.figure()
-        plt.yscale('log')
-        print(self.params['p'].shape, self.params['lmbda'].shape, self.MSE_test.shape)
-        cont = plt.contourf(self.params['p'], self.params['lmbda'], np.swapaxes(self.MSE_test, 0, 1), norm='log')
-        # cont = plt.imshow(np.log(z), cmap=cm.coolwarm, origin='lower', extent=(x[0], x[-1], y[0], y[-1]))
-        plt.colorbar(cont, aspect=5)
-        
-        plt.savefig(self.name+"_HM.pdf")
-        
-    def BiasVariance(self):
-        pass
+    def PlotHeatMap(self, plot: str = 'MSE', ls: str = '-') -> None:
+        fig, ax = plt.subplots(figsize=(14,14))
+        lambdas = self.params['lmbda']
 
-    def TrainAndTest(self, *params, p: int = 5, lmbda: float = None, rng: int = None, bootstrap: int = 0) -> None:
-        X_train, X_test, y_train, y_test = train_test_split(self.X, self.z, test_size=0.2, random_state=rng)
+        sns.heatmap(
+            np.swapaxes(self.MSE_test, 0, 1),
+            cmap='viridis',
+            square=True,
+            robust=True,
+            annot=True,
+            yticklabels=[f'{np.log10(lmbda):.2f}' for lmbda in lambdas],
+            cbar_kws={'label': 'Mean Squared Error'},
+        )
+
+        ax.set_xlabel('p')
+        ax.set_ylabel(r'log$_{10}$($\beta$)')
+
+        # cont = plt.contourf(self.params['p'], self.params['lmbda'], np.swapaxes(self.MSE_test, 0, 1), norm='log')
+        # cont = plt.imshow(np.log(z), cmap=cm.coolwarm, origin='lower', extent=(x[0], x[-1], y[0], y[-1]))
+        # plt.colorbar(cont, aspect=5)
+        
+        plt.savefig('Plots/'+self.name+"_HM.pdf")
+
+    def PlotBeta(self, plot: str = 'MSE', ls: str = '-') -> None:
+        fig, ax = plt.subplots(figsize=(16,4))
+        mask = np.where(self.beta == np.inf, 1, 0)
+        sns.heatmap(
+            self.beta, 
+            mask=mask, 
+            cmap='viridis',
+            square=True, 
+            robust=True,
+            annot=True,
+            cbar_kws={'label': 'Mean Squared Error'}
+        )
+
+        ax.set_ylabel('p')
+        ax.set_xlabel(r'number of $\beta$ values')
+
+        plt.savefig(f'Plots/{self.name}_BetaHM.pdf')
+
+    def BiasVariance(self, plot: str = 'MSE', ls: str = '-') -> None:
+        mse = self.results['MSE_test']
+        bias = self.results['Bias']
+        variance = self.results['Variance']
+
+        if isinstance(self.key, tuple):
+            pass
+        else:
+            x = self.params[self.key]
+
+            plt.plot(x, mse, label='Error')
+            plt.plot(x, bias, label='Bias')
+            plt.plot(x, variance, label='Variance')
+
+        plt.legend()
+        plt.grid()
+        plt.savefig(f"Plots/{self.name}_BiasVariance.pdf")
+
+    def TrainAndTest(self, *params, p: int = 5, lmbda: float = None, rng: int = None, bootstrap: int = 0, scale_data: bool = False) -> None:
+        X_train, X_test, y_train, y_test = train_test_split(self.X, np.ravel(self.z), test_size=0.2, random_state=rng)
+
+        y_train, y_test = y_train.reshape(-1,1), y_test.reshape(-1,1)
+
+        if scale_data:
+            xscaler = StandardScaler()
+            yscaler = StandardScaler()
+            zshape = z.shape
+
+            xscaler.fit(X_train)
+            X_train = xscaler.transform(X_train)
+            X_test = xscaler.transform(X_test)
+            self.X = xscaler.transform(self.X)
+
+            y_train = y_train.reshape(-1, 1)
+            y_test = y_test.reshape(-1, 1)
+            self.z = z.ravel().reshape(-1, 1)
+
+            yscaler.fit(y_train)
+            y_train = np.ravel(yscaler.transform(y_train)).reshape(-1, 1)
+            y_test = np.ravel(yscaler.transform(y_test)).reshape(-1, 1)
+            self.z = np.ravel(yscaler.transform(self.z)).reshape(zshape)
 
         if lmbda != None:
             self.model.set_params(alpha=lmbda)
@@ -198,9 +336,12 @@ class LinearRegression:
             param = self.params[params[0]]
             self.MSE_test = np.zeros(len(param))
             self.MSE_Train = np.zeros(len(param))
+            self.R2 = np.zeros(len(param))
             self.Bias = np.zeros(len(param))
             self.Variance = np.zeros(len(param))
 
+            pn = len(self.params['p'])
+            self.beta = np.full((pn, int(((pn + 1)*(pn))/2)), np.inf)
             for i in range(len(param)):
                 X_train_, X_test_ = X_train, X_test
                 if self.key == 'p':
@@ -212,22 +353,26 @@ class LinearRegression:
                 self.model.fit(X_train_, y_train)
 
                 y_fit = self.model.predict(X_train_)
-                y_pred = self.model.predict(X_test) if bootstrap == 0 else np.empty((y_test.shape[0]*y_test.shape[1], bootstrap))
-                beta = self.model.coef_ if bootstrap == 0 else np.zeros(np.swapaxes(self.X, 0, 1).shape)
+                y_pred = self.model.predict(X_test_) if bootstrap == 0 else np.empty((y_test.shape[0], bootstrap))
+                beta = self.model.coef_ if bootstrap == 0 else np.zeros((n, bootstrap))
                 for k in range(bootstrap):
-                    x, y = resample(X_train, y_train)
+                    x, y = resample(X_train_, y_train)
                     
-                    y_pred[:, k] = self.model.fit(x, y).predict(X_test).ravel()
-                    beta += np.swapaxes(self.model.coef_, 0, 1)
+                    y_pred[:, k] = self.model.fit(x, y).predict(X_test_).ravel()
+                    beta[:,k]= self.model.coef_
                     
                 if bootstrap != 0 :
-                    y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
+                    beta = np.mean(beta, axis=1)
+                    # y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
                 self.MSE_Train[i] = MSE(y_train, y_fit)
                 self.MSE_test[i] = MSE(y_test, y_pred)
+                self.R2[i] = R2(y_test, y_pred)
                 
                 self.Bias[i] = Bias(y_test, y_pred)
                 self.Variance[i] = Variance(y_pred)
+
+                self.beta[i, :n] = beta
 
                 # print(f'{'MSE:' : <4} {mean_squared_error(y_test, y_pred):g}')
                 # print(f'{'R2:' : <4} {r2_score(y_test, y_pred):g}')
@@ -237,6 +382,14 @@ class LinearRegression:
             p = self.params[self.key[0]], self.params[self.key[1]]
 
             self.MSE_test = np.zeros( ( (
+                len(p[0]), 
+                len(p[1])
+                ) ) )
+            self.MSE_Train = np.zeros( ( (
+                len(p[0]), 
+                len(p[1])
+                ) ) )
+            self.R2 = np.zeros( ( (
                 len(p[0]), 
                 len(p[1])
                 ) ) )
@@ -267,17 +420,20 @@ class LinearRegression:
                     self.model.fit(X_train_, y_train)
 
                     y_fit = self.model.predict(X_train_)
-                    y_pred = self.model.predict(X_test) if bootstrap == 0 else np.empty((y_test.shape[0]*y_test.shape[1], bootstrap))
+                    y_pred = self.model.predict(X_test_) if bootstrap == 0 else np.empty((y_test.shape[0], bootstrap))
+                    beta = self.model.coef_ if bootstrap == 0 else np.zeros((n, bootstrap))
                     for k in range(bootstrap):
-                        x, y = resample(X_train, y_train)
+                        x, y = resample(X_train_, y_train)
                         
-                        y_pred[:, k] = self.model.fit(x, y).predict(X_test).ravel()
+                        y_pred[:, k] = self.model.fit(x, y).predict(X_test_).ravel()
             
                     if bootstrap != 0 :
-                        y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
+                        beta = np.mean(beta, axis=1)
+                        # y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
-                    # MSE_Train[i] = mean_squared_error(y_train, y_fit)
+                    self.MSE_Train[i, j] = MSE(y_train, y_fit)
                     self.MSE_test[i, j] = MSE(y_test, y_pred)
+                    self.R2[i, j] = R2(y_test, y_pred)
                     self.Bias[i, j] = Bias(y_test, y_pred)
                     self.Variance[i, j] = Variance(y_pred)
 
@@ -289,24 +445,46 @@ class LinearRegression:
             n = int(((p + 2)*(p + 1))/2)
 
             y_fit = self.model.predict(X_train)
-            y_pred = self.model.predict(X_test) if bootstrap == 0 else np.empty((y_test.shape[0]*y_test.shape[1], bootstrap))
-            beta = self.model.coef_ if bootstrap == 0 else np.zeros((n, len(self.x)))
+            y_pred = self.model.predict(X_test) if bootstrap == 0 else np.empty((y_test.shape[0], bootstrap))
+            self.beta = self.model.coef_ if bootstrap == 0 else np.zeros((n, bootstrap))
             for k in range(bootstrap):
                 x, y = resample(X_train, y_train)
                 
                 y_pred[:, k] = self.model.fit(x, y).predict(X_test).ravel()
-                beta += np.swapaxes(self.model.coef_, 0, 1)
+                self.beta[:,k] = self.model.coef_
             
-            self.beta = beta/bootstrap
             if bootstrap != 0 :
-                y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
+                self.beta = np.mean(self.beta, axis=1)
+                # y_test = np.swapaxes(y_test.reshape(1, -1), 0, 1)
 
-            print(f'{"MSE:" : <10} {MSE(y_test, y_pred):g}')
-            print(f'{"R2:" : <10} {R2(y_test, y_pred):g}')
-            print(f'{"Bias:" : <10} {Bias(y_test, y_pred):g}')
-            print(f'{"Variance:" : <10} {Variance(y_pred):g}')
+            print(self.beta.shape, self.beta)
 
-    def CrossValidation(self, *params, name: str, p_order: int = 5, lmbda: float = None, k: int = 10, n_jobs: int = 1) -> None:
+            # y_test = y_test.reshape(-1,1)
+            self.MSE_Train = MSE(y_train, y_fit)
+            self.MSE_test = MSE(y_test, y_pred)
+            self.R2 = R2(y_test, y_pred)
+            self.Bias = Bias(y_test, y_pred)
+            self.Variance = Variance(y_pred)
+
+            print(f'{"MSE:" : <10} {self.MSE_test:g}')
+            print(f'{"R2:" : <10} {self.R2:g}')
+            print(f'{"Bias:" : <10} {self.Bias:g}')
+            print(f'{"Variance:" : <10} {self.Variance:g}')
+
+        # print(self.X.shape, self.beta.shape)
+        # print(self.X)
+        # print(self.beta)
+        # print((self.X @ self.beta).reshape(100, 100))
+
+        self.results = {
+            'MSE_test': self.MSE_test,
+            'MSE_train': self.MSE_Train,
+            'R2': self.R2,
+            'Bias': self.Bias,
+            'Variance': self.Variance,
+        }
+
+    def CrossValidation(self, *params, p_order: int = 5, lmbda: float = None, k: int = 10, n_jobs: int = 1) -> None:
         """
             This function can do a Cross Validation for Linear Regression, with the current models, (Ordinary Least Square, Ridge, Lasso). 
             Additionally it can perform a grid search over the following parameters (lambda, p). Read Parameters for further information.
@@ -329,7 +507,7 @@ class LinearRegression:
                       scoring='neg_mean_squared_error',
                       n_jobs=n_jobs)
     
-        cv.fit(self.X, self.z)
+        cv.fit(self.X, np.ravel(self.z))
 
         """print(cv.best_index_)
         df = pd.DataFrame(cv.cv_results_)
@@ -341,7 +519,7 @@ class LinearRegression:
         for param, value in cv.best_params_.items():
             print(f"{'Best '+param : <12} {value:g}")
         print(f"{'Best MSE' : <12} {-cv.best_score_:.5f}")
-        print(f"{'CV score': <12} {-np.mean(cross_val_score(cv.best_estimator_, self.X, self.z, scoring='neg_mean_squared_error', cv=k)):.5f}")
+        # print(f"{'CV score': <12} {-np.mean(cross_val_score(cv.best_estimator_, self.X, self.z, scoring='neg_mean_squared_error', cv=k)):.5f}")
 
         n = len(params)
         results = -cv.cv_results_['mean_test_score']
@@ -353,42 +531,72 @@ class LinearRegression:
             self.key = params
             self.MSE_test = results
 
-            # self.PlotHeatMap(param_grid['p'], param_grid['lmbda'], MSE, name+'_HM')
-
+        self.results = {
+            'MSE': self.MSE_test
+        }
+        self.name += '_CV'
         
+
 if __name__ == "__main__":
     start = time.time()
-    n = 100
+    n = 30
     x = np.linspace(0, 1, n)
     y = np.linspace(0, 1, n)
+    # x = np.sort(np.random.uniform(0.1, 1, n))
+    # y = np.sort(np.random.uniform(0.1, 1, n))
+
+    x, y = np.meshgrid(x, y)
         
-    z = FrankeFunction(x, y, 0)
+    z = FrankeFunction(x, y, 0.05)
     
-    p = 12
-    lmbda = 1e-4
+    p = 17
+    lmbda = 1e-2
     
     lambdas = np.logspace(-8, 1, 20)
     ps = np.arange(p+1)
     
     k = 10
-    ridge = LinearRegression(x, y, z, 'Ridge')
-    ridge.DesignMatrix(p)
-    ridge.SetParams(p=ps, lmbda=lambdas)
-    # ridge.TrainAndTest('p', 'lmbda', bootstrap=2, p=p, lmbda=lmbda)
-    ridge.CrossValidation('lmbda', name='Ridge_CV', n_jobs=1)
-    
-    # ridge.Plot()
-    ridge.PlotGraph()
-    # ridge.PlotHeatMap()
+    # ridge = LinearRegression(x, y, z, 'Ridge')
+    # ridge.DesignMatrix(p)
+    # ridge.SetParams(p=ps, lmbda=lambdas)
+    # ridge.TrainAndTest('p', 'lmbda', bootstrap=10, p=p, lmbda=lmbda)
+    # ridge.CrossValidation('p', 'lmbda', n_jobs=8)
 
-    # ols = LinearRegression(x, y, z, 'OLS')
-    # ols.DesignMatrix(p)
-    # ols.SetParams(p=ps)
-    # ols.TrainAndTest('p')
+    # ridge.Plot()
+    # ridge.PlotGraph('R2')
+    # plt.figure()
+    # ridge.PlotGraph('MSE')
+    # plt.figure()
+    # ridge.PlotBeta()
+    # plt.figure()
+    # ridge.PlotHeatMap()
+    # ridge.BiasVariance()
+
+    ols = LinearRegression(x, y, z, 'OLS')
+    ols.DesignMatrix(p)
+    ols.SetParams(p=ps, lmbda = lambdas)
+ 
+    ols.TrainAndTest('p', p=p, bootstrap=40, lmbda=None, scale_data=True)
+    ols.Plot()
+    plt.figure()
+    ols.PlotGraph('MSE', train=True)
+    # plt.figure()
+    # ols.PlotGraph('R2')
+
+    # ols.SetModel('Ridge')
+    # ols.TrainAndTest('p', p=p, bootstrap=0, lmbda=lmbda)
+    # ols.PlotGraph('MSE', ls='--', label='sklearn', train=True)
+
+    # plt.figure()
+    # ols.PlotBeta()
+    plt.figure()
+    ols.BiasVariance()
+    
     # ols.CrossValidation('p', name='OLS_CV', n_jobs=8)
+    # ols.PlotGraph('MSE')
 
 
     end = time.time()
     print(f'Time: {end - start:.2f}s')
     
-    plt.show()
+    # plt.show()
