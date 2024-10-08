@@ -8,7 +8,7 @@ from sklearn.metrics import mean_squared_error, r2_score, classification_report
 from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, KFold, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures, MinMaxScaler, MaxAbsScaler, RobustScaler
 from sklearn.linear_model._base import BaseEstimator
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.utils import resample
 
 import matplotlib.pyplot as plt
@@ -38,12 +38,10 @@ def MSE(y_data: np.ndarray, y_model: np.ndarray) -> float:
 
 
 def Bias(y_data: np.ndarray, y_model: np.ndarray) -> float:
-    y_model = y_model.reshape(-1, 1)
     return np.mean( (y_data - np.mean(y_model, axis=1, keepdims=True))**2 )
 
 
 def Variance(y_model: np.ndarray) -> float:
-    y_model = y_model.reshape(-1, 1)
     return np.mean( np.var(y_model, axis=1, keepdims=True) )
 
 
@@ -368,9 +366,9 @@ class LinearRegression:
                 self.MSE_Train[i] = MSE(y_train, y_fit)
                 self.MSE_test[i] = MSE(y_test, y_pred)
                 self.R2[i] = R2(y_test, y_pred)
-                
-                self.Bias[i] = Bias(y_test, y_pred)
-                self.Variance[i] = Variance(y_pred)
+                if bootstrap != 0:
+                    self.Bias[i] = Bias(y_test, y_pred)
+                    self.Variance[i] = Variance(y_pred)
 
                 self.beta[i, :n] = beta
 
@@ -434,8 +432,9 @@ class LinearRegression:
                     self.MSE_Train[i, j] = MSE(y_train, y_fit)
                     self.MSE_test[i, j] = MSE(y_test, y_pred)
                     self.R2[i, j] = R2(y_test, y_pred)
-                    self.Bias[i, j] = Bias(y_test, y_pred)
-                    self.Variance[i, j] = Variance(y_pred)
+                    if bootstrap != 0:
+                        self.Bias[i, j] = Bias(y_test, y_pred)
+                        self.Variance[i, j] = Variance(y_pred)
 
                     # print(f'{'MSE:' : <4} {mean_squared_error(y_test, y_pred):g}')
                     # print(f'{'R2:' : <4} {r2_score(y_test, y_pred):g}')
@@ -463,8 +462,9 @@ class LinearRegression:
             self.MSE_Train = MSE(y_train, y_fit)
             self.MSE_test = MSE(y_test, y_pred)
             self.R2 = R2(y_test, y_pred)
-            self.Bias = Bias(y_test, y_pred)
-            self.Variance = Variance(y_pred)
+            if bootstrap != 0:
+                self.Bias = Bias(y_test, y_pred)
+                self.Variance = Variance(y_pred)
 
             print(f'{"MSE:" : <10} {self.MSE_test:g}')
             print(f'{"R2:" : <10} {self.R2:g}')
@@ -484,7 +484,7 @@ class LinearRegression:
             'Variance': self.Variance,
         }
 
-    def CrossValidation(self, *params, p_order: int = 5, lmbda: float = None, k: int = 10, n_jobs: int = 1) -> None:
+    def CrossValidation(self, *params, p_order: int = 5, lmbda: float = None, k: int = 10, n_jobs: int = 1, scale_data: bool = False) -> None:
         """
             This function can do a Cross Validation for Linear Regression, with the current models, (Ordinary Least Square, Ridge, Lasso). 
             Additionally it can perform a grid search over the following parameters (lambda, p). Read Parameters for further information.
@@ -501,12 +501,38 @@ class LinearRegression:
         for param in params:
             param_grid[param] = self.params[param]
 
+        pipe = Pipeline(steps=[
+            ("scaler", StandardScaler()),
+            ("model", Estimator(lin_reg=self.name, p=p_order, lmbda=lmbda))
+        ])
+
+        # if scale_data:
+            # cv = make_pipeline(StandardScaler(),
+            #                GridSearchCV(Estimator(lin_reg=self.name, p=p_order, lmbda=lmbda),
+            #                                cv=k,
+            #                                param_grid=param_grid,
+            #                                scoring='neg_mean_squared_error',
+            #                                n_jobs=n_jobs,
+            #                                refit=True)
+            # )
+
         cv = GridSearchCV(Estimator(lin_reg=self.name, p=p_order, lmbda=lmbda),
-                      cv=k,
-                      param_grid=param_grid,
-                      scoring='neg_mean_squared_error',
-                      n_jobs=n_jobs)
-    
+                    cv=k,
+                    param_grid=param_grid,
+                    scoring='neg_mean_squared_error',
+                    n_jobs=n_jobs
+        )
+
+        if scale_data:
+            xscaler = StandardScaler()
+            yscaler = StandardScaler()
+
+            self.X = xscaler.fit_transform(self.X)
+
+            zshape = self.z.shape
+            self.z = self.z.ravel().reshape(-1, 1)
+            self.z = np.ravel(yscaler.fit_transform(self.z)).reshape(zshape)
+
         cv.fit(self.X, np.ravel(self.z))
 
         """print(cv.best_index_)
@@ -514,6 +540,8 @@ class LinearRegression:
         MSE_std = df['rank_test_score' == cv.best_index_]
         print(pd.DataFrame(MSE_std))"""
         
+        # if scale_data:
+        #     cv = cv.named_steps['gridsearchcv'] # Get the gridsearch from the pipeline
         print(f"{'Parameter' : <12} Value")
         print('---------------------------')
         for param, value in cv.best_params_.items():
@@ -521,11 +549,13 @@ class LinearRegression:
         print(f"{'Best MSE' : <12} {-cv.best_score_:.5f}")
         # print(f"{'CV score': <12} {-np.mean(cross_val_score(cv.best_estimator_, self.X, self.z, scoring='neg_mean_squared_error', cv=k)):.5f}")
 
+        self.model = cv.best_estimator_
+
         n = len(params)
         results = -cv.cv_results_['mean_test_score']
         if n == 1:
             self.key = params[0]
-            self.MSE_test = results
+            self.MSE_test = results.reshape(-1,1)
         elif n > 1:
             results = results.reshape(len(self.params['p']), len(self.params['lmbda']), order='F')
             self.key = params

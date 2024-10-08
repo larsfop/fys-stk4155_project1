@@ -72,13 +72,15 @@ if config['data'] == 'Franke':
     z = FrankeFunction(x, y, config['noise'])
 else:
     terrain = config['data']
-    z = np.asarray(imread(f'SRTM_data_Norway_{terrain}.tif'), dtype=np.float32)
+    z = np.asarray(imread(f'SRTM_data_Norway_{terrain}.tif'), dtype=np.float32)[:100, :100]
     yn, xn = z.shape
 
-    x = np.arange(xn, dtype=np.float32)
-    y = np.arange(yn, dtype=np.float32)
-    # x = np.asarray(np.sort(np.random.uniform(0, 1, xn)), dtype=np.float32)
-    # y = np.asarray(np.sort(np.random.uniform(0, 1, yn)), dtype=np.float32)
+    x = np.linspace(0, 1, xn, dtype=np.float32)
+    y = np.linspace(0, 1, yn, dtype=np.float32)
+    # x = np.arange(0, 1, xn, dtype=np.float32)
+    # y = np.arange(0, 1, yn, dtype=np.float32)
+    # x = np.asarray(np.sort(np.random.uniform(0.1, 1, xn)), dtype=np.float32)
+    # y = np.asarray(np.sort(np.random.uniform(0.1, 1, yn)), dtype=np.float32)
 
     x, y = np.meshgrid(x, y)
 
@@ -104,7 +106,8 @@ else:
                         p_order=config['p'],
                         lmbda=config['lmbda'],
                         k=config['kfold'],
-                        n_jobs=config['njobs']
+                        n_jobs=config['njobs'],
+                        scale_data=config['scale']
     )
 
 ### Make plots ###
