@@ -20,6 +20,7 @@ config = {
     'njobs': 1,
     'plots': 'graph',
     'data': 'Franke',
+    'scale': False,
 }
 
 if len(sys.argv) > 1:
@@ -45,6 +46,8 @@ if len(sys.argv) > 1:
             config[key] = int(value)
         elif key == 'njobs':
             config[key] = int(value)
+        elif key == 'scale':
+            config[key] = bool(value)
         else:
             config[key] = value
 
@@ -72,8 +75,10 @@ else:
     z = np.asarray(imread(f'SRTM_data_Norway_{terrain}.tif'), dtype=np.float32)
     yn, xn = z.shape
 
-    x = np.sort(np.random.uniform(0, 1, xn))
-    y = np.sort(np.random.uniform(0, 1, yn))
+    x = np.arange(xn, dtype=np.float32)
+    y = np.arange(yn, dtype=np.float32)
+    # x = np.asarray(np.sort(np.random.uniform(0, 1, xn)), dtype=np.float32)
+    # y = np.asarray(np.sort(np.random.uniform(0, 1, yn)), dtype=np.float32)
 
     x, y = np.meshgrid(x, y)
 
@@ -91,7 +96,8 @@ if not config['cv']:
     reg.TrainAndTest(*config['params'].split(','), 
                      p=config['p'], lmbda=config['lmbda'],
                      bootstrap=config['bootstrap'], 
-                     rng=config['rng']
+                     rng=config['rng'],
+                     scale_data=config['scale'],
     )
 else:
     reg.CrossValidation(*config['params'].split(','), 

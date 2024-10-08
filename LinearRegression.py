@@ -312,7 +312,7 @@ class LinearRegression:
         if scale_data:
             xscaler = StandardScaler()
             yscaler = StandardScaler()
-            zshape = z.shape
+            zshape = self.z.shape
 
             xscaler.fit(X_train)
             X_train = xscaler.transform(X_train)
@@ -321,7 +321,7 @@ class LinearRegression:
 
             y_train = y_train.reshape(-1, 1)
             y_test = y_test.reshape(-1, 1)
-            self.z = z.ravel().reshape(-1, 1)
+            self.z = self.z.ravel().reshape(-1, 1)
 
             yscaler.fit(y_train)
             y_train = np.ravel(yscaler.transform(y_train)).reshape(-1, 1)
