@@ -1,4 +1,4 @@
-import numpy as np
+import autograd.numpy as np
 
 class BaseLossFunction:
     def __init__(self) -> None:

@@ -1,11 +1,11 @@
-import numpy as np
+import autograd.numpy as np
 
 class BaseOptimizer:
     def __init__(self, lr: float = 1e-2, verbose: int = 1, **_) -> None:
         self.lr = lr
         self.params = {}
         
-        if len(_) > 0 and verbose == 1:
+        if len(_) > 0 and verbose > 0:
             print('### Warning! Unused Parameters ###')
             print(f"With opimizer '{type(self).__name__}' the following parameters are unused")
             for key, value in _.items():
