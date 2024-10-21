@@ -1,6 +1,7 @@
 import autograd.numpy as np
 from autograd import grad, elementwise_grad
 from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 
 import optim as opt
 import loss_fn as lf
@@ -47,9 +48,10 @@ class NeuralNetwork:
         
         self.optimizer = optimizer
         self.loss_fn = loss_fn
+        self.derivative_loss_fn = grad(loss_fn)
         
-    def split_data(self, X: np.ndarray, y: np.ndarray, split: float = 0.2, rng: int = None):
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, y, test_size=split, random_state=rng)
+    # def split_data(self, X: np.ndarray, y: np.ndarray, split: float = 0.2, rng: int = None):
+    #     self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, y, test_size=split, random_state=rng)
         
     def create_layers(self):
         self.layers = []
@@ -80,7 +82,7 @@ class NeuralNetwork:
             
         return a
         
-    def back_propagation(self):
+    def back_propagation(self, X: np.ndarray, t: np.ndarray):
         # error_output = self.a[-1] - self.y_train
         activation_func_derivative = list(reversed(self.grad_activation_func))
         
@@ -92,15 +94,16 @@ class NeuralNetwork:
             ## Output Layer ##
             if i == len(self.layers) - 1:
                 a = self.a[i+1]
-                error = a - self.y_train
+                # error = a - self.y_train
                 
+                z = self.z[i]
+                error = activation_func_derivative[i](z) * grad(self.loss_fn(t))(a)
+
                 a = self.a[i]
                 W, b = self.layers[i]
-                W -= self.eta * a.T @ error
+                W -= self.eta * (a.T @ error + self.regularization * W)
                 
-                # Regularization term
-                W += self.regularization * W
-                b -= np.sum(error, axis=0)
+                b -= self.eta * np.sum(error, axis=0)
                 
                 self.layers[i] = (W, b)
             else:
@@ -110,47 +113,68 @@ class NeuralNetwork:
                 
                 W, b = self.layers[i]
                 # Compute new weight
-                W -= self.eta * a.T @ error
-                # Regularization term
-                W += self.regularization * W
+                W -= self.eta * (a.T @ error + self.regularization * W)
                 # Compute new bias
                 b -= self.eta * np.sum(error, axis=0)
                 
                 self.layers[i] = (W, b)
             
-    def train(self, epochs: int = 1000):
+    def train(self, X: np.ndarray, t: np.ndarray, epochs: int = 1000):
         for i in range(epochs):
-            self.feed_forward(self.X_train)
-            self.back_propagation()
+            self.feed_forward(X)
+            self.back_propagation(X, t)
     
     def predict(self, X: np.ndarray) -> np.ndarray:
         predict = self.feed_forward(X)
         
         return predict
+
+
+def OLS(target):
     
+    def func(X):
+        return (1.0 / target.shape[0]) * np.sum((target - X) ** 2)
+
+    return func
+
     
 if __name__=="__main__":
+    np.random.seed(125)
+
     n = 100
     x = np.sort(np.random.uniform(-1, 1, n))
     y = 2*x + 9*x**2 + 4*x**3
     
-    y = y.reshape(y.shape[0], -1)
+    y = y.reshape(-1, 1)
     
-    print(f'{1:06.2f}')
+    # print(f'{1:06.2f}')
     
-    p = 5
+    p = 3
     X = DesignMatrix(p, x)
+    # print(X)
+    from sklearn.linear_model import LinearRegression
+    ols = LinearRegression(fit_intercept=False)
+    ols.fit(X, y)
+    # print(ols.coef_)
+    # print(ols.predict(X))
+    # print(y)
     
     md = ModelDict(p+1,
-                         [12, p+1],
-                         [Sigmoid, ReLU]
+                         [12, 10, 1],
+                         [Sigmoid, Sigmoid, ReLU]
                     )
-    print(md)
+    # print(md)
     
-    test = NeuralNetwork(md, learning_rate=1e-5)
+    test = NeuralNetwork(md, learning_rate=1e-1, loss_fn=OLS)
     test.split_data(X, y)
     test.create_layers()
     test.train()
     
     pred = test.predict(X)
-    print(pred.shape)
+    # print(pred)
+    # print(pred.shape)
+
+    plt.scatter(x, y)
+    plt.scatter(x, pred)
+
+    plt.show()

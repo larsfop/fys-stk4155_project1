@@ -11,8 +11,10 @@ def SoftMax(x: np.ndarray) -> np.ndarray:
 
 
 def ReLU(x: np.ndarray) -> np.ndarray:
-    return np.where(x > np.zeros(x.shape), np.ones(x.shape), np.zeros(x.shape))
+    return np.where(x > 0, x, 0)
 
+def Linear(x: np.ndarray) -> np.ndarray:
+    return x
 
 def derivative(func):
     if func.__name__ == "ReLU":
