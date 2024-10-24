@@ -151,30 +151,26 @@ if __name__=="__main__":
     
     p = 3
     X = DesignMatrix(p, x)
-    # print(X)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.2)
+
     from sklearn.linear_model import LinearRegression
     ols = LinearRegression(fit_intercept=False)
     ols.fit(X, y)
-    # print(ols.coef_)
-    # print(ols.predict(X))
-    # print(y)
     
     md = ModelDict(p+1,
-                         [12, 10, 1],
-                         [Sigmoid, Sigmoid, ReLU]
+                         [100, 1],
+                         [Sigmoid, ReLU]
                     )
     # print(md)
     
     test = NeuralNetwork(md, learning_rate=1e-1, loss_fn=OLS)
-    test.split_data(X, y)
     test.create_layers()
-    test.train()
+    test.train(X_train, y_train)
     
-    pred = test.predict(X)
-    # print(pred)
-    # print(pred.shape)
+    pred = test.predict(X_test)
 
     plt.scatter(x, y)
-    plt.scatter(x, pred)
+    plt.scatter(X_test[:,1], pred)
 
     plt.show()
