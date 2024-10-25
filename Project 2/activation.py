@@ -16,12 +16,3 @@ def ReLU(x: np.ndarray) -> np.ndarray:
 def Linear(x: np.ndarray) -> np.ndarray:
     return x
 
-def derivative(func):
-    if func.__name__ == "ReLU":
-        def func(x):
-            return np.where(x > 0, 1, 0)
-        
-        return func
-        
-    else:
-        return elementwise_grad(func)

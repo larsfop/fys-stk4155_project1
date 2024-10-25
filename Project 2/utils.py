@@ -1,4 +1,5 @@
 import autograd.numpy as np
+from autograd import elementwise_grad
 
 def DesignMatrix(p_order: int, *arrays: np.ndarray, intercept: bool = True) -> np.ndarray:
     """
@@ -54,3 +55,14 @@ class ModelDict:
                 i += 1
                 
         return string
+    
+    
+def derivative(func):
+    if func.__name__ == "ReLU":
+        def func(x):
+            return np.where(x > 0, 1, 0)
+        
+        return func
+        
+    else:
+        return elementwise_grad(func)

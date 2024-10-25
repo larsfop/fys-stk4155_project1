@@ -1,28 +1,13 @@
 import autograd.numpy as np
 from autograd import grad, elementwise_grad
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, MaxAbsScaler
 import matplotlib.pyplot as plt
 
 import optim as opt
 import loss_fn as lf
 from activation import *
-from utils import DesignMatrix, ModelDict
-
-def create_layers(model_structure: dict):
-    layers = []
-        
-    i_size = model_structure['input']
-    for key, value in model_structure.items():
-        if key != "input":
-            print(key, value)
-            output_size = value[0]
-            W = np.random.randn(i_size, output_size)
-            b = np.random.randn(output_size)
-            layers.append((W, b))
-
-            i_size = output_size
-    for w, b in layers:
-        print(w.shape, b.shape)
+from utils import DesignMatrix, ModelDict, derivative
 
 class NeuralNetwork:
     def __init__(
@@ -49,9 +34,6 @@ class NeuralNetwork:
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.derivative_loss_fn = grad(loss_fn)
-        
-    # def split_data(self, X: np.ndarray, y: np.ndarray, split: float = 0.2, rng: int = None):
-    #     self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X, y, test_size=split, random_state=rng)
         
     def create_layers(self):
         self.layers = []
@@ -124,7 +106,7 @@ class NeuralNetwork:
             self.feed_forward(X)
             self.back_propagation(X, t)
     
-    def predict(self, X: np.ndarray) -> np.ndarray:
+    def nn_predict(self, X: np.ndarray) -> np.ndarray:
         predict = self.feed_forward(X)
         
         return predict
@@ -151,26 +133,52 @@ if __name__=="__main__":
     
     p = 3
     X = DesignMatrix(p, x)
+    
+    # scaler = StandardScaler()
+    # X = scaler.fit_transform(X)
+    # y = scaler.fit_transform(y)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.2)
+    
+    scaler = StandardScaler()
+    scaler.fit(X_train)
+    X_train = scaler.transform(X_train)
+    X_test = scaler.transform(X_test)
+    
+    scaler.fit(y_train)
+    y_train = scaler.transform(y_train)
+    y_test = scaler.transform(y_test)
 
     from sklearn.linear_model import LinearRegression
     ols = LinearRegression(fit_intercept=False)
-    ols.fit(X, y)
+    ols.fit(X_train, y_train)
     
-    md = ModelDict(p+1,
-                         [100, 1],
-                         [Sigmoid, ReLU]
-                    )
+    
+    md = ModelDict(
+        p+1,
+        [100, 1],
+        [Sigmoid, Linear]
+    )
     # print(md)
     
-    test = NeuralNetwork(md, learning_rate=1e-1, loss_fn=OLS)
+    test = NeuralNetwork(md, learning_rate=1e-1, loss_fn=OLS, regulatization=0)
     test.create_layers()
     test.train(X_train, y_train)
     
-    pred = test.predict(X_test)
+    pred = test.nn_predict(X_test)
+    
+    x = X_test[:,1]
+    y_reg = ols.predict(X_test)
+    y_reg = y_reg[x.argsort()]
+    
+    y_nn = test.nn_predict(X_test)
+    y_nn = y_nn[x.argsort()]
+    
+    x = np.sort(x)
+    
+    plt.plot(x, y_reg, label='Linear Regression')
+    plt.plot(x, y_nn, '--', label='Neural Network')
 
-    plt.scatter(x, y)
-    plt.scatter(X_test[:,1], pred)
-
+    plt.grid()
+    plt.legend()
     plt.show()
